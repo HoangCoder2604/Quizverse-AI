@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("LOCAL_DATABASE_URL")
+}
+
+model Quiz {
+  id         String   @id
+  ownerId    String
+  title      String
+  topic      String
+  difficulty String
+  questions  String   // JSON; schema checked on API boundary
+  demo       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  attempts   Attempt[]
+
+  @@index([ownerId, createdAt])
+}
+
+model Attempt {
+  id         String   @id
+  ownerId    String
+  quizId     String
+  title      String
+  score      Int
+  total      Int
+  finishedAt DateTime @default(now())
+  quiz       Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, finishedAt])
+}
+
+
+model User {
+  id String @id
+  email String @unique
+  firebaseUid String? @unique
+  name String
+  passwordHash String
+  createdAt DateTime @default(now())
+  emailVerifiedAt DateTime?
+  sessions Session[]
+  emailVerificationTokens EmailVerificationToken[]
+}
+
+model Session {
+  id String @id
+  userId String
+  tokenHash String @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id String @id
+  userId String
+  tokenHash String @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model AuthRateLimit {
+  id        String @id
+  hits      Int
+  expiresAt Int
+  @@index([expiresAt])
+}
+
+
+// Phase 5: topic-level mastery and revision history. Previous quiz/attempt tables remain untouched.
+model TopicMastery {
+  id          String   @id
+  ownerId     String
+  topic       String
+  answered    Int      @default(0)
+  correct     Int      @default(0)
+  strength    Float    @default(0)
+  streak      Int      @default(0)
+  nextReview  DateTime @default(now())
+  updatedAt   DateTime @default(now())
+  @@unique([ownerId, topic])
+  @@index([ownerId, nextReview])
+}
+
+model ReviewCard {
+  id          String   @id
+  ownerId     String
+  topic       String
+  question    String
+  options     String
+  correctIndex Int
+  explanation String
+  intervalDays Int      @default(1)
+  repetitions Int      @default(0)
+  nextReview  DateTime @default(now())
+  updatedAt   DateTime @default(now())
+  @@unique([ownerId, id])
+  @@index([ownerId, nextReview])
+}
+
+model LearningSubmission {
+  attemptId   String   @id
+  ownerId     String
+  createdAt   DateTime @default(now())
+  @@index([ownerId, createdAt])
+}
