@@ -50,6 +50,11 @@ export default function Home(){
  const [timeLeft,setTimeLeft]=useState(0);
  const [mastery,setMastery]=useState<TopicStats[]>([]);
  const [reviewDue,setReviewDue]=useState<DueCard[]>([]);
+ const [reviewSessionIds,setReviewSessionIds]=useState<string[]>([]);
+ const [reviewTopic,setReviewTopic]=useState("");
+ const [reviewDueCount,setReviewDueCount]=useState(0);
+ const [reviewTopicCounts,setReviewTopicCounts]=useState<{topic:string;count:number}[]>([]);
+ const visibleReviewDue=reviewTopic?reviewDue.filter(c=>c.topic===reviewTopic):reviewDue;
  const [learningBusy,setLearningBusy]=useState(false);
  const [tutorId,setTutorId]=useState<string|null>(null);
  const [tutorQuestion,setTutorQuestion]=useState("");
@@ -93,18 +98,18 @@ export default function Home(){
  }
  async function refreshLearning(){
   try{const r=await fetch("/api/learning",{cache:"no-store"});if(!r.ok)return;
-    const data=await r.json();setMastery(data.topics||[]);setReviewDue(data.due||[]);
+    const data=await r.json();setMastery(data.topics||[]);setReviewDue(data.due||[]);setReviewDueCount(data.dueCount||0);setReviewTopicCounts(data.dueByTopic||[]);
   }catch{/* Existing Quiz flows remain usable if learning metrics are unavailable. */}
  }
  function recommendedQuiz(t:TopicStats){
   setTopic(t.topic);setDifficulty(t.recommendedDifficulty);setCount(10);setSourceMode("topic");go("create");
  }
  function practiceDue(){
-  if(!reviewDue.length)return;
-  const selected=reviewDue.slice(0,Math.min(10,reviewDue.length));
-  const quiz:Quiz={id:crypto.randomUUID(),title:"Ôn tập thông minh",topic:selected[0].topic,difficulty:"medium",demo:true,
+  if(!visibleReviewDue.length)return;
+  const selected=visibleReviewDue.slice(0,Math.min(10,visibleReviewDue.length));
+  const quiz:Quiz={id:crypto.randomUUID(),title:"Ôn tập thông minh",topic:reviewTopic||"Ôn tập tổng hợp",difficulty:"medium",demo:true,
     questions:selected.map(c=>({id:crypto.randomUUID(),question:c.question,options:c.options,correctIndex:c.correctIndex,explanation:c.explanation})),createdAt:new Date().toISOString()};
-  start(quiz);
+  start(quiz,selected.map(c=>c.id));
  }
  async function askTutor(card:DueCard){
   if(!tutorQuestion.trim()||tutorBusy)return;
@@ -198,7 +203,7 @@ export default function Home(){
  const best=useMemo(()=>attempts.length?Math.round(attempts.reduce((s,a)=>s+a.score/a.total*100,0)/attempts.length):0,[attempts]);
  const navigation=[{id:"dashboard" as Screen,label:"Tổng quan",icon:LayoutDashboard},{id:"create" as Screen,label:"Tạo bài luyện tập",icon:Sparkles},{id:"library" as Screen,label:"Bộ sưu tập",icon:Library},{id:"analytics" as Screen,label:"Thống kê",icon:ChartNoAxesCombined},{id:"learning" as Screen,label:"Học tập thích ứng",icon:BrainCircuit}];
  function go(next:Screen){setScreen(next);setError("");setSideOpen(false)}
- function start(quiz:Quiz){setCurrent(quiz);setIndex(0);setAnswers({});setFinished(null);quizDeadline.current=Date.now()+quiz.questions.length*60000;setTimeLeft(quiz.questions.length*60);go("quiz")}
+ function start(quiz:Quiz,reviewIds:string[]=[]){setReviewSessionIds(reviewIds);setCurrent(quiz);setIndex(0);setAnswers({});setFinished(null);quizDeadline.current=Date.now()+quiz.questions.length*60000;setTimeLeft(quiz.questions.length*60);go("quiz")}
  function startDemo(category:string){const quiz=makeDemoQuiz(category,5,difficulty);start(quiz)}
  // Mỗi ký tự nguồn được đưa vào đúng một chunk, không bỏ phần giữa tài liệu.
  function splitAllText(raw: string, chunkSize = 34000): string[] {
@@ -401,8 +406,14 @@ export default function Home(){
   const score=current.questions.reduce((sum,q,i)=>sum+(answers[i]===q.correctIndex?1:0),0);
   const a:Attempt={id:crypto.randomUUID(),quizId:current.id,title:current.title,score,total:current.questions.length,finishedAt:new Date().toISOString()};
   setLearningBusy(true);
-  setFinished(a);setAttempts(old=>[a,...old]);go("results");
+  setFinished(a);if(!reviewSessionIds.length)setAttempts(old=>[a,...old]);go("results");
   try{
+   if(reviewSessionIds.length){
+    const r=await fetch("/api/learning/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cardIds:reviewSessionIds,answers:current.questions.map((_,i)=>answers[i]??-1)})});
+    if(!r.ok)throw new Error((await r.json()).error||"Không lưu được lịch ôn");
+    await refreshLearning();
+    return;
+   }
    if(current.demo){
     const r=await fetch("/api/attempts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({attempt:a,demoQuiz:current})});
     if(!r.ok)throw new Error((await r.json()).error||"Không lưu được bài làm mẫu");
@@ -422,7 +433,7 @@ export default function Home(){
   if(screen==="quiz" && current && !finished && timeLeft===0)finish();
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[timeLeft,screen]);
- function reset(){setAnswers({});setIndex(0);quizDeadline.current=Date.now()+(current?.questions.length||0)*60000;setTimeLeft(current?.questions.length?current.questions.length*60:0);setFinished(null);go("quiz")}
+ function reset(){if(reviewSessionIds.length){setReviewSessionIds([]);void refreshLearning();go("learning");return;}setAnswers({});setIndex(0);quizDeadline.current=Date.now()+(current?.questions.length||0)*60000;setTimeLeft(current?.questions.length?current.questions.length*60:0);setFinished(null);go("quiz")}
  const question=current?.questions[index];const answeredCount=Object.keys(answers).length;
  if(!authReady)return <div className="auth-page"><div className="auth-card">Đang kiểm tra tài khoản...</div></div>;
  if(!user)return <div className="auth-page"><div className="auth-card">
@@ -448,6 +459,7 @@ export default function Home(){
   <aside className={`sidebar ${sideOpen?"open":""}`}>
    <button className="brand" onClick={()=>go("dashboard")}><span className="brand-icon"><BrainCircuit size={22}/></span><span>quizverse<span className="brand-ai">.</span><small>LEARN SOMETHING NEW</small></span></button>
    <div className="nav-heading">KHÔNG GIAN HỌC TẬP</div><nav>{navigation.map(item=><button key={item.id} className={`nav-item ${screen===item.id?"active":""}`} onClick={()=>go(item.id)}><item.icon size={19}/>{item.label}{item.id==="create"&&<span className="new-tag">AI</span>}</button>)}</nav>
+   <a className="nav-item" href="/community" style={{textDecoration:"none",margin:"6px 12px"}}><Trophy size={19}/> Cộng đồng & Thi đấu</a>
    <div className="sidebar-bottom"><div className="upgrade"><span className="upgrade-icon"><Sparkles size={18}/></span><strong>Học điều bạn muốn</strong><p>Từ điều bạn tò mò đến kiến thức bạn thật sự hiểu.</p><button onClick={()=>go("create")}>Bắt đầu ngay <ArrowRight size={15}/></button></div><div className="profile"><span className="avatar">{user.name.trim().split(/\s+/).pop()?.charAt(0).toLocaleUpperCase("vi")||user.email.charAt(0).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.email}</small></div><button className="logout-button" onClick={logout} title="Đăng xuất">Đăng xuất</button></div></div>
   </aside>
   {sideOpen&&<div className="overlay" onClick={()=>setSideOpen(false)}/>}
@@ -503,9 +515,10 @@ export default function Home(){
     {screen==="library"&&<><div className="page-heading"><span className="eyebrow">BỘ SƯU TẬP</span><h1>Thư viện Quiz</h1><p>Những bộ câu hỏi bạn đã tạo và lưu lại.</p></div>{quizzes.length?<div className="library-grid">{quizzes.map(q=><div className="library-card" key={q.id}><span className="library-icon"><BookOpen size={23}/></span><span className="library-badge">{q.demo?"DEMO":"TỰ TẠO"}</span><h3>{q.title}</h3><p>{q.topic}</p><div className="library-bottom"><span>{q.questions.length} câu · {q.difficulty}</span><div className="library-actions"><button onClick={()=>editSavedQuiz(q)} disabled={!!libraryBusy} title="Sửa Quiz"><Pencil size={15}/> Sửa</button><button className="danger-action" onClick={()=>void deleteSavedQuiz(q)} disabled={!!libraryBusy} title="Xóa Quiz"><Trash2 size={15}/> Xóa</button><button onClick={()=>start(q)}>Bắt đầu <ArrowRight size={16}/></button></div></div></div>)}</div>:<div className="large-empty"><BookOpen size={38}/><h3>Thư viện đang trống</h3><p>Tạo Quiz của riêng bạn để lưu vào bộ sưu tập. Các bài mẫu chỉ được ghi vào lịch sử sau khi nộp bài.</p><button className="primary-button" onClick={()=>go("create")}>Tạo Quiz đầu tiên <ArrowRight size={17}/></button></div>}</>}
     {screen==="learning"&&<section className="adaptive-page">
       <div className="page-heading"><span className="eyebrow">PHASE 5 · ADAPTIVE LEARNING</span><h1>Lộ trình học tập của bạn</h1><p>Độ khó đề xuất được tính từ kết quả các bài đã làm. Mức thành thạo chỉ mang tính ước lượng, không phải đánh giá năng lực tuyệt đối.</p></div>
-      <div className="adaptive-summary"><div className="panel"><small>CHỦ ĐỀ ĐÃ LUYỆN</small><h2>{mastery.length}</h2></div><div className="panel"><small>CÂU CẦN ÔN HÔM NAY</small><h2>{reviewDue.length}</h2></div><div className="panel"><small>THÀNH THẠO TRUNG BÌNH</small><h2>{mastery.length?Math.round(mastery.reduce((s,t)=>s+t.strength,0)/mastery.length*100):0}%</h2></div></div>
-      <div className="panel adaptive-panel"><div className="adaptive-panel-head"><div><h2>Ôn tập theo khoảng cách</h2><p>Những câu đã sai sẽ xuất hiện lại theo lịch. Khi trả lời đúng, khoảng cách ôn tập được tăng dần.</p></div><button className="primary-button" disabled={!reviewDue.length||learningBusy} onClick={practiceDue}>Ôn {Math.min(10,reviewDue.length)} câu đến hạn <ArrowRight size={16}/></button></div>
-       {reviewDue.length?<div className="adaptive-due-list">{reviewDue.slice(0,6).map(c=><div key={c.id} className="adaptive-due-row"><div><small>{c.topic}</small><strong>{c.question}</strong></div><button className="secondary-button" onClick={()=>{setTutorId(tutorId===c.id?null:c.id);setTutorResponse("");setTutorQuestion("");}}>Hỏi gia sư</button>{tutorId===c.id&&<div className="adaptive-tutor"><p><strong>Giải thích ban đầu:</strong> {c.explanation}</p><label>Điều bạn chưa hiểu<textarea rows={2} maxLength={800} value={tutorQuestion} onChange={e=>setTutorQuestion(e.target.value)} placeholder="Ví dụ: Vì sao đáp án này đúng?"/></label><button className="primary-button" disabled={tutorBusy||tutorQuestion.trim().length<3} onClick={()=>void askTutor(c)}>{tutorBusy?"Đang giải thích...":"Hỏi QuizVerse AI Tutor"}</button>{tutorResponse&&<p className="tutor-response">{tutorResponse}</p>}</div>}</div>)}</div>:<p className="adaptive-empty">Hiện chưa có câu hỏi đến hạn. Hãy làm thêm Quiz để xây dựng lịch ôn tập.</p>}
+      <div className="adaptive-summary"><div className="panel"><small>CHỦ ĐỀ ĐÃ LUYỆN</small><h2>{mastery.length}</h2></div><div className="panel"><small>CÂU CẦN ÔN HÔM NAY</small><h2>{reviewDueCount}</h2></div><div className="panel"><small>THÀNH THẠO TRUNG BÌNH</small><h2>{mastery.length?Math.round(mastery.reduce((s,t)=>s+t.strength,0)/mastery.length*100):0}%</h2></div></div>
+      <div className="panel adaptive-panel"><div className="adaptive-panel-head"><div><h2>Ôn tập theo khoảng cách</h2><p>Những câu đã sai sẽ xuất hiện lại theo lịch. Khi trả lời đúng, khoảng cách ôn tập được tăng dần.</p></div><button className="primary-button" disabled={!visibleReviewDue.length||learningBusy} onClick={practiceDue}>Ôn {Math.min(10,visibleReviewDue.length)} / {visibleReviewDue.length} câu đến hạn <ArrowRight size={16}/></button></div>
+       <label className="adaptive-review-filter">Chọn chủ đề ôn tập <select aria-label="Lọc câu ôn tập theo chủ đề" value={reviewTopic} onChange={e=>setReviewTopic(e.target.value)}><option value="">Tất cả chủ đề ({reviewDueCount} câu)</option>{reviewTopicCounts.map(x=><option value={x.topic} key={x.topic}>{x.topic} ({x.count} câu)</option>)}</select></label>
+       {visibleReviewDue.length?<div className="adaptive-due-list">{visibleReviewDue.slice(0,6).map(c=><div key={c.id} className="adaptive-due-row"><div><small>{c.topic}</small><strong>{c.question}</strong></div><button className="secondary-button" onClick={()=>{setTutorId(tutorId===c.id?null:c.id);setTutorResponse("");setTutorQuestion("");}}>Hỏi gia sư</button>{tutorId===c.id&&<div className="adaptive-tutor"><p><strong>Giải thích ban đầu:</strong> {c.explanation}</p><label>Điều bạn chưa hiểu<textarea rows={2} maxLength={800} value={tutorQuestion} onChange={e=>setTutorQuestion(e.target.value)} placeholder="Ví dụ: Vì sao đáp án này đúng?"/></label><button className="primary-button" disabled={tutorBusy||tutorQuestion.trim().length<3} onClick={()=>void askTutor(c)}>{tutorBusy?"Đang giải thích...":"Hỏi QuizVerse AI Tutor"}</button>{tutorResponse&&<p className="tutor-response">{tutorResponse}</p>}</div>}</div>)}</div>:<p className="adaptive-empty">Không có câu hỏi đến hạn trong lựa chọn này. Hãy chọn Tất cả chủ đề hoặc luyện thêm Quiz.</p>}
       </div>
       <div className="panel adaptive-panel"><h2>Mức thành thạo theo chủ đề</h2>{mastery.length?<div className="adaptive-topics">{mastery.map(t=><div className="adaptive-topic" key={t.topic}><div className="adaptive-topic-title"><strong>{t.topic}</strong><span>{Math.round(t.strength*100)}% · {t.correct}/{t.answered} câu đúng</span></div><div className="adaptive-track"><div style={{width:`${t.strength*100}%`}}/></div><div className="adaptive-topic-foot"><small>Gợi ý độ khó: {t.recommendedDifficulty==="easy"?"Dễ":t.recommendedDifficulty==="medium"?"Trung bình":"Khó"} · Chuỗi bài tốt: {t.streak}</small><button className="secondary-button" onClick={()=>recommendedQuiz(t)}>Tạo Quiz thích ứng <ArrowRight size={14}/></button></div></div>)}</div>:<p className="adaptive-empty">Chưa có dữ liệu thành thạo. Hoàn thành một bài Quiz để bắt đầu.</p>}</div>
      </section>}

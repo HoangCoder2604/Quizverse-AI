@@ -16,6 +16,7 @@ model Quiz {
   questions  String   // JSON; schema checked on API boundary
   demo       Boolean  @default(false)
   createdAt  DateTime @default(now())
+  visibility String @default("private")
   attempts   Attempt[]
 
   @@index([ownerId, createdAt])
@@ -113,4 +114,72 @@ model LearningSubmission {
   ownerId     String
   createdAt   DateTime @default(now())
   @@index([ownerId, createdAt])
+}
+
+
+// Phase 6: community, achievements, server-authoritative multiplayer.
+model PlayerProfile {
+  userId String @id
+  xp Int @default(0)
+  level Int @default(1)
+  wins Int @default(0)
+  games Int @default(0)
+  updatedAt DateTime @updatedAt
+}
+model PlayerAchievement {
+  id String @id
+  userId String
+  code String
+  createdAt DateTime @default(now())
+  @@unique([userId,code])
+  @@index([userId])
+}
+model QuizRoom {
+  id String @id
+  code String @unique
+  quizId String
+  hostId String
+  state String @default("lobby")
+  questionIndex Int @default(0)
+  secondsPerQuestion Int @default(30)
+  maxParticipants Int @default(10)
+  startedAt DateTime?
+  endsAt DateTime?
+  createdAt DateTime @default(now())
+  participants RoomParticipant[]
+  answers RoomAnswer[]
+  @@index([hostId])
+}
+model RoomParticipant {
+  id String @id
+  roomId String
+  userId String
+  displayName String
+  score Int @default(0)
+  finished Boolean @default(false)
+  joinedAt DateTime @default(now())
+  room QuizRoom @relation(fields:[roomId],references:[id],onDelete:Cascade)
+  @@unique([roomId,userId])
+}
+model RoomAnswer {
+  id String @id
+  roomId String
+  userId String
+  questionIndex Int
+  choiceIndex Int
+  correct Boolean
+  answeredAt DateTime @default(now())
+  room QuizRoom @relation(fields:[roomId],references:[id],onDelete:Cascade)
+  @@unique([roomId,userId,questionIndex])
+}
+
+// Community safety: reports are private and owned by the reporter.
+model QuizReport {
+ id String @id
+ quizId String
+ reporterId String
+ reason String
+ createdAt DateTime @default(now())
+ @@unique([quizId,reporterId])
+ @@index([quizId,createdAt])
 }

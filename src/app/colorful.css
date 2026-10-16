@@ -38,3 +38,16 @@ a:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-visible
 .source-upload input{width:100%;padding:14px;border:1px dashed #aaa3d9;border-radius:13px;background:#faf9ff}
 .source-upload small,.creator-panel>small{display:block;margin:8px 0 18px;color:#726f83;line-height:1.55}
 @media(max-width:600px){.source-modes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Phase 6 UI fix: keep the sidebar account name/email and logout fully visible. */
+.sidebar{height:100dvh;min-height:0;overflow-y:auto;overflow-x:hidden}
+.sidebar-bottom{flex-shrink:0;padding-bottom:10px}
+.profile{display:flex;align-items:center;gap:8px;min-height:70px;margin-top:14px;padding:13px 0 4px;min-width:0}
+.profile .avatar{flex:0 0 34px}
+.profile>div{flex:1 1 auto;min-width:0;overflow:hidden}
+.profile strong,.profile small{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
+.profile .logout-button{flex:0 0 auto;width:auto;max-width:76px;min-width:65px;white-space:normal;overflow-wrap:normal;text-align:center;line-height:1.2;padding:8px 6px}
+
+/* Phase 6.1 learning topic selector */
+.adaptive-review-filter{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:15px 0;color:#52466b;font-weight:600}
+.adaptive-review-filter select{max-width:100%;min-width:min(100%,220px);padding:10px 14px;border:1px solid #ddd5ef;border-radius:10px;background:white;color:#302849}

@@ -1,0 +1,26 @@
+*{box-sizing:border-box}body{background:#f5f4fb;color:#29243c;font-family:Arial,sans-serif;margin:0}.community-shell{max-width:1150px;margin:auto;padding:32px 20px}.community-head{padding:16px 0 26px}.community-head a{display:flex;gap:8px;align-items:center;color:#6151ba;text-decoration:none}.community-head h1{font-size:38px;letter-spacing:-1px}.community-head h1 span{color:#7961d7}.community-head p{color:#786f8e}.community-card{background:white;border:1px solid #e8e3f3;border-radius:20px;padding:24px;margin-bottom:22px;box-shadow:0 6px 25px #3d307108}.community-card h2{display:flex;align-items:center;gap:10px;font-size:20px}.community-columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.community-columns .community-card{margin:0 0 22px}.community-card input,.community-card select{border:1px solid #e1dbf0;border-radius:9px;padding:10px;background:#fff;max-width:100%}.community-card button,.community-modal button{background:#775ddd;color:white;border:0;border-radius:9px;padding:10px 15px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}.community-card button:disabled{opacity:.45;cursor:not-allowed}.community-inline,.community-filters,.community-pagination{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:15px 0}.community-filters input{flex:1;min-width:220px}.community-entry{display:flex;flex-wrap:wrap;align-items:center;gap:15px;justify-content:space-between;border-top:1px solid #eeeaf6;padding:12px 0}.community-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.community-quiz{padding:18px;border-radius:16px;background:#f8f6ff;border:1px solid #eeeafa}.community-quiz h3{min-height:45px}.community-quiz p{font-size:13px;color:#797087}.community-pagination{justify-content:center}.community-notice{padding:12px 17px;background:#fff1dc;border-radius:12px}.community-modal{position:fixed;inset:0;background:#1d1437b9;display:grid;place-items:center;z-index:20;padding:20px}.community-modal-body{background:white;border-radius:20px;padding:25px;max-width:780px;width:100%;max-height:90vh;overflow:auto}.community-modal fieldset{border:1px solid #e7e1f7;border-radius:10px;padding:15px;margin:15px 0}.community-modal label{display:block;padding:8px;cursor:pointer}.community-close{float:right}.community-correct{color:#127c3a}.community-wrong{color:#aa3541}@media(max-width:650px){.community-columns{grid-template-columns:1fr}.community-head h1{font-size:27px}}
+/* TC01 fix: cards retain equal height and actions line up across cards. */
+.community-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));align-items:stretch}
+.community-quiz{display:flex;flex-direction:column;min-width:0;min-height:280px}
+.community-quiz h3{margin:16px 0 10px;line-height:1.35;overflow-wrap:anywhere}
+.community-quiz p{line-height:1.5;overflow-wrap:anywhere}
+.community-quiz-actions{margin-top:auto;display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;padding-top:14px}
+.community-quiz-actions button{justify-content:center;min-height:44px;white-space:nowrap;flex:1 1 auto}
+@media(max-width:650px){.community-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}}
+
+/* TC01 v2: keep Quiz selector and Create Room button separate and responsive. */
+.community-room-create{display:flex;align-items:stretch;gap:12px;min-width:0;margin-top:12px}
+.community-room-create select{flex:1 1 0;min-width:0;width:100%;height:44px}
+.community-room-create button{flex:0 0 auto;min-height:44px;white-space:nowrap;justify-content:center}
+.community-room-join{margin-top:12px;gap:12px}
+.community-room-join input{flex:0 1 230px;min-width:0;height:44px}
+.community-room-join button{flex:0 0 auto;min-height:44px}
+@media(max-width:450px){.community-room-create{flex-direction:column}.community-room-create select,.community-room-create button{width:100%}.community-room-join input{flex:1 1 150px}}
+
+/* Phase 6.1: room configuration */
+.community-room-create{flex-wrap:wrap;align-items:end}
+.community-room-create>select{flex:2 1 220px;width:auto}
+.community-room-setting{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#62577b;flex:1 1 125px;min-width:110px}
+.community-room-setting input,.community-room-setting select{width:100%;height:44px;min-width:0}
+.community-room-create>button{height:44px}
+@media(max-width:650px){.community-room-create>select,.community-room-setting,.community-room-create>button{width:100%;flex:1 1 100%}}

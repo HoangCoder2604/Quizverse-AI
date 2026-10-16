@@ -8,6 +8,15 @@ function normalized(topic: string) { return topic.trim().replace(/\s+/g, " ").sl
 function recommended(strength: number): "easy" | "medium" | "hard" {
   return strength >= 0.8 ? "hard" : strength >= 0.5 ? "medium" : "easy";
 }
+// Same owner/topic/question/options/correct answer across different Quiz IDs = one review item.
+// Keep separate cards when an option or the correct answer differs.
+function canonical(s:string){return s.trim().replace(/\s+/g," ").toLocaleLowerCase("vi");}
+function identity(c:{topic:string;question:string;options:string;correctIndex:number}){
+  let options:unknown;
+  try{options=JSON.parse(c.options);}catch{options=c.options;}
+  return JSON.stringify([canonical(c.topic),canonical(c.question),
+    Array.isArray(options)?options.map(x=>canonical(String(x))):options,c.correctIndex]);
+}
 export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -15,13 +24,17 @@ export async function GET() {
     const db=getPrisma(), now=new Date();
     const [topics,cards]=await Promise.all([
       db.topicMastery.findMany({where:{ownerId:user.id},orderBy:{updatedAt:"desc"},take:100}),
-      db.reviewCard.findMany({where:{ownerId:user.id,nextReview:{lte:now}},orderBy:{nextReview:"asc"},take:50})
+      db.reviewCard.findMany({where:{ownerId:user.id,nextReview:{lte:now}},orderBy:{nextReview:"asc"}})
     ]);
+    // Deduplicate legacy cards for display and counts; no historical data is deleted.
+    const unique=[...new Map(cards.map(c=>[identity(c),c])).values()];
+    const groupCounts=new Map<string,number>();
+    for(const c of unique)groupCounts.set(c.topic,(groupCounts.get(c.topic)||0)+1);
     return NextResponse.json({
       topics:topics.map(t=>({topic:t.topic,answered:t.answered,correct:t.correct,strength:t.strength,streak:t.streak,
         recommendedDifficulty:recommended(t.strength),nextReview:t.nextReview.toISOString()})),
-      due:cards.map(c=>({id:c.id,topic:c.topic,question:c.question,options:JSON.parse(c.options),correctIndex:c.correctIndex,explanation:c.explanation,nextReview:c.nextReview.toISOString()})),
-      dueCount:await db.reviewCard.count({where:{ownerId:user.id,nextReview:{lte:now}}})
+      due:unique.map(c=>({id:c.id,topic:c.topic,question:c.question,options:JSON.parse(c.options),correctIndex:c.correctIndex,explanation:c.explanation,nextReview:c.nextReview.toISOString()})),
+      dueCount:unique.length,dueByTopic:[...groupCounts].sort((a,b)=>a[0].localeCompare(b[0])).map(([topic,count])=>({topic,count}))
     });
   }catch(err){console.error("learning GET",err);return NextResponse.json({error:"Không đọc được dữ liệu học tập. Kiểm tra migration Phase 5."},{status:500});}
 }
@@ -53,16 +66,27 @@ export async function POST(req:NextRequest){
       const days=passed>=0.8?Math.min(30,Math.pow(2,Math.min(streak,4))):1;
       const nextReview=new Date(now.getTime()+days*86400000);
       await tx.topicMastery.upsert({where:{ownerId_topic:{ownerId:user.id,topic}},create:{id:crypto.randomUUID(),ownerId:user.id,topic,answered:total,correct,strength,streak,nextReview,updatedAt:now},update:{answered:total,correct,strength,streak,nextReview,updatedAt:now}});
+      // Read existing review cards once per topic, then match by content, not Quiz ID.
+      const known=await tx.reviewCard.findMany({where:{ownerId:user.id,topic}});
       for(let i=0;i<questions.length;i++){
         const q=questions[i], correctAnswer=answers[i]===q.correctIndex;
-        // Question ID is stable for saved quiz; include owner to enforce separation.
-        const id=`${user.id}:${attempt.quizId}:${q.id}`;
-        const existing=await tx.reviewCard.findUnique({where:{id}});
-        if(!correctAnswer||existing){
-          const repetitions=correctAnswer?(existing?.repetitions||0)+1:0;
-          const intervalDays=correctAnswer?Math.min(30,Math.max(1,(existing?.intervalDays||1)*2)):1;
-          const due=new Date(now.getTime()+(correctAnswer?intervalDays*86400000:0));
-          await tx.reviewCard.upsert({where:{id},create:{id,ownerId:user.id,topic,question:q.question,options:JSON.stringify(q.options),correctIndex:q.correctIndex,explanation:q.explanation,intervalDays,repetitions,nextReview:due,updatedAt:now},update:{question:q.question,options:JSON.stringify(q.options),correctIndex:q.correctIndex,explanation:q.explanation,intervalDays,repetitions,nextReview:due,updatedAt:now}});
+        const match=identity({topic,question:q.question,options:JSON.stringify(q.options),correctIndex:q.correctIndex});
+        const equivalents=known.filter(c=>identity(c)===match);
+        if(correctAnswer && !equivalents.length)continue;
+        const existing=equivalents[0];
+        const repetitions=correctAnswer?(existing?.repetitions||0)+1:0;
+        const intervalDays=correctAnswer?Math.min(30,Math.max(1,(existing?.intervalDays||1)*2)):1;
+        const due=new Date(now.getTime()+(correctAnswer?intervalDays*86400000:0));
+        if(equivalents.length){
+          for(const card of equivalents)await tx.reviewCard.update({where:{id:card.id},data:{
+            repetitions,intervalDays,nextReview:due,updatedAt:now
+          }});
+        }else{
+          const id=`${user.id}:${attempt.quizId}:${q.id}`;
+          const created=await tx.reviewCard.create({data:{id,ownerId:user.id,topic,
+            question:q.question,options:JSON.stringify(q.options),correctIndex:q.correctIndex,
+            explanation:q.explanation,intervalDays,repetitions,nextReview:due,updatedAt:now}});
+          known.push(created);
         }
       }
     });

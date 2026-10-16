@@ -1,0 +1,13 @@
+ALTER TABLE "Quiz" ADD COLUMN "visibility" TEXT NOT NULL DEFAULT 'private';
+CREATE INDEX "Quiz_visibility_createdAt_idx" ON "Quiz"("visibility", "createdAt");
+CREATE TABLE "PlayerProfile" ("userId" TEXT NOT NULL PRIMARY KEY,"xp" INTEGER NOT NULL DEFAULT 0,"level" INTEGER NOT NULL DEFAULT 1,"wins" INTEGER NOT NULL DEFAULT 0,"games" INTEGER NOT NULL DEFAULT 0,"updatedAt" DATETIME NOT NULL);
+CREATE TABLE "PlayerAchievement" ("id" TEXT NOT NULL PRIMARY KEY,"userId" TEXT NOT NULL,"code" TEXT NOT NULL,"createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "PlayerAchievement_userId_code_key" ON "PlayerAchievement"("userId","code");
+CREATE INDEX "PlayerAchievement_userId_idx" ON "PlayerAchievement"("userId");
+CREATE TABLE "QuizRoom" ("id" TEXT NOT NULL PRIMARY KEY,"code" TEXT NOT NULL,"quizId" TEXT NOT NULL,"hostId" TEXT NOT NULL,"state" TEXT NOT NULL DEFAULT 'lobby',"questionIndex" INTEGER NOT NULL DEFAULT 0,"startedAt" DATETIME,"endsAt" DATETIME,"createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "QuizRoom_code_key" ON "QuizRoom"("code");
+CREATE INDEX "QuizRoom_hostId_idx" ON "QuizRoom"("hostId");
+CREATE TABLE "RoomParticipant" ("id" TEXT NOT NULL PRIMARY KEY,"roomId" TEXT NOT NULL,"userId" TEXT NOT NULL,"displayName" TEXT NOT NULL,"score" INTEGER NOT NULL DEFAULT 0,"finished" BOOLEAN NOT NULL DEFAULT false,"joinedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY ("roomId") REFERENCES "QuizRoom"("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE UNIQUE INDEX "RoomParticipant_roomId_userId_key" ON "RoomParticipant"("roomId","userId");
+CREATE TABLE "RoomAnswer" ("id" TEXT NOT NULL PRIMARY KEY,"roomId" TEXT NOT NULL,"userId" TEXT NOT NULL,"questionIndex" INTEGER NOT NULL,"choiceIndex" INTEGER NOT NULL,"correct" BOOLEAN NOT NULL,"answeredAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY ("roomId") REFERENCES "QuizRoom"("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE UNIQUE INDEX "RoomAnswer_roomId_userId_questionIndex_key" ON "RoomAnswer"("roomId","userId","questionIndex");
