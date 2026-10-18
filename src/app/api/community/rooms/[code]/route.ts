@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from "next/server";
 import {currentUser,allowMutation} from "@/lib/auth";
 import {getPrisma} from "@/lib/prisma";
+import {notifyRoom} from "@/lib/room-realtime";
 export const runtime="nodejs";
 type C={params:Promise<{code:string}>};
 const err=(error:string,status:number)=>NextResponse.json({error},{status});
@@ -36,6 +37,7 @@ export async function POST(req:NextRequest,ctx:C){
     if(live.participants.length>=live.maxParticipants)throw new Error("Phòng đã đủ người");
     await tx.roomParticipant.create({data:{id:crypto.randomUUID(),roomId:room.id,userId:user.id,displayName:user.name}});
    });
+   await notifyRoom(code);
    return NextResponse.json({ok:true});
   }catch(e){return err(e instanceof Error&&e.message==="Phòng đã đủ người"?e.message:"Không tham gia được phòng (đã đủ hoặc vừa bắt đầu)",409)}
  }
@@ -44,6 +46,7 @@ export async function POST(req:NextRequest,ctx:C){
   if(room.hostId!==user.id)return err("Chỉ chủ phòng được bắt đầu",403);
   if(room.participants.length<2)return err("Cần ít nhất 2 người",409);
   const updated=await db.quizRoom.updateMany({where:{id:room.id,state:"lobby"},data:{state:"playing",startedAt:new Date()}});
+  if(updated.count) await notifyRoom(code);
   return updated.count?NextResponse.json({ok:true}):err("Phòng đã bắt đầu",409);
  }
  if(body?.action==="answer"){
@@ -60,6 +63,7 @@ export async function POST(req:NextRequest,ctx:C){
     await tx.roomAnswer.create({data:{id:crypto.randomUUID(),roomId:room.id,userId:user.id,questionIndex:idx,choiceIndex:choice,correct}});
     if(correct)await tx.roomParticipant.update({where:{roomId_userId:{roomId:room.id,userId:user.id}},data:{score:{increment:100}}});
    });
+   await notifyRoom(code);
    return NextResponse.json({ok:true});
   }catch{return err("Bạn đã trả lời câu này",409)}
  }
@@ -83,6 +87,7 @@ export async function POST(req:NextRequest,ctx:C){
     await tx.playerAchievement.upsert({where:{userId_code:{userId:user.id,code:"first_room"}},create:{id:crypto.randomUUID(),userId:user.id,code:"first_room"},update:{}});
     return true;
    });
+   if(awarded) await notifyRoom(code);
    return NextResponse.json({ok:true,xpEarned:awarded?xp:0});
   }catch(e){console.error("room reward transaction",e);return err("Không lưu được phần thưởng, hãy thử lại",503)}
  }

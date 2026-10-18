@@ -1,13 +1,17 @@
 "use client";
 import {useEffect,useState} from "react";
 import Link from "next/link";
-import {BookOpen,Search,Share2,Trophy,Users,Star,ArrowLeft,Play} from "lucide-react";
+import {BookOpen,Search,Share2,Trophy,Users,Star,ArrowLeft,Play,Flag,X} from "lucide-react";
 type Listing={id:string;title:string;topic:string;difficulty:string;questionCount:number;visibility?:string};
 type Question={id:string;question:string;options:string[]};
 const call=async(url:string,init?:RequestInit)=>{const r=await fetch(url,{cache:"no-store",...init});const j=await r.json();if(!r.ok)throw new Error(j.error||"Yêu cầu thất bại");return j};
 export default function Community(){
  const [items,setItems]=useState<Listing[]>([]),[mine,setMine]=useState<Listing[]>([]),[visibilityBusy,setVisibilityBusy]=useState<string[]>([]),[q,setQ]=useState(""),[topicFilter,setTopicFilter]=useState(""),[difficulty,setDifficulty]=useState(""),[sort,setSort]=useState("newest"),[page,setPage]=useState(1),[total,setTotal]=useState(0);
  const [notice,setNotice]=useState(""),[selected,setSelected]=useState<{id:string;title:string;questions:Question[]}|null>(null),[answers,setAnswers]=useState<Record<number,number>>({}),[result,setResult]=useState<{score:number;total:number;details:{correctIndex:number;explanation:string}[]}|null>(null);
+ const [reportQuiz,setReportQuiz]=useState<Listing|null>(null);
+ const [reportReason,setReportReason]=useState("");
+ const [reportBusy,setReportBusy]=useState(false);
+ const [reportError,setReportError]=useState("");
  const [code,setCode]=useState(""),[roomQuiz,setRoomQuiz]=useState(""),[roomSeconds,setRoomSeconds]=useState(30),[roomCapacity,setRoomCapacity]=useState("10"),[profile,setProfile]=useState<{profile:{xp:number;level:number;games:number};achievements:{code:string}[];leaderboard:{rank:number;name:string;xp:number;level:number}[]}|null>(null);
  useEffect(()=>{let cancelled=false;const params=new URLSearchParams({q,topic:topicFilter,difficulty,sort,page:String(page)});void call("/api/community/quizzes?"+params).then(d=>{if(!cancelled){setItems(d.items);setTotal(d.total)}}).catch(e=>setNotice(e.message));return()=>{cancelled=true}},[q,topicFilter,difficulty,sort,page]);
  useEffect(()=>{void call("/api/quizzes").then(d=>setMine(d.quizzes)).catch(()=>{});void call("/api/community/profile").then(setProfile).catch(()=>{});const t=setInterval(()=>{void call("/api/community/profile").then(setProfile).catch(()=>{})},5000);return()=>clearInterval(t)},[]);
@@ -15,6 +19,23 @@ export default function Community(){
  const open=(id:string)=>action(async()=>{const d=await call("/api/community/quizzes/"+encodeURIComponent(id));setSelected(d.quiz);setAnswers({});setResult(null)});
  useEffect(()=>{const id=new URLSearchParams(location.search).get("quiz");if(id)void open(id)},[]);
  const post=(url:string,payload:unknown)=>call(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+ const closeReport=()=>{if(reportBusy)return;setReportQuiz(null);setReportReason("");setReportError("")};
+ const submitReport=async(event:React.FormEvent<HTMLFormElement>)=>{
+  event.preventDefault();
+  if(!reportQuiz||reportBusy)return;
+  const reason=reportReason.trim();
+  if(reason.length<10||reason.length>500){setReportError("Lý do báo cáo phải có từ 10 đến 500 ký tự.");return;}
+  setReportBusy(true);setReportError("");
+  try{await post("/api/community/reports",{quizId:reportQuiz.id,reason});setNotice("Đã gửi báo cáo để quản trị viên xem xét.");setReportQuiz(null);setReportReason("");}
+  catch(e){setReportError(e instanceof Error?e.message:"Không gửi được báo cáo.")}
+  finally{setReportBusy(false)}
+ };
+ useEffect(()=>{
+  if(!reportQuiz)return;
+  const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape"&&!reportBusy){setReportQuiz(null);setReportReason("");setReportError("")}};
+  window.addEventListener("keydown",onKey);
+  return()=>window.removeEventListener("keydown",onKey);
+ },[reportQuiz,reportBusy]);
  const createRoom=()=>action(async()=>{const d=await post("/api/community/rooms",{quizId:roomQuiz,secondsPerQuestion:roomSeconds,maxParticipants:Number(roomCapacity)});location.href="/room/"+d.code});
  const changeVisibility=async(id:string,nextVisibility:string)=>{
   const previous=mine.find(item=>item.id===id)?.visibility||"private";
@@ -38,8 +59,22 @@ export default function Community(){
  {notice&&<p role="status" className="community-notice">{notice}</p>}
  <section className="community-columns"><div className="community-card"><h2><Trophy/> Hồ sơ thi đấu</h2><p>Cấp <b>{profile?.profile.level??1}</b> · <b>{profile?.profile.xp??0}</b> XP · {profile?.profile.games??0} trận</p><p>Thành tựu: {profile?.achievements.map(a=>a.code==="first_room"?"Trận đầu tiên":a.code==="first_100_xp"?"100 XP":a.code).join(", ")||"Chưa có"}</p></div><div className="community-card"><h2><Users/> Phòng thi nhanh</h2><div className="community-room-create"><select aria-label="Chọn Quiz mở phòng" value={roomQuiz} onChange={e=>setRoomQuiz(e.target.value)}><option value="">Chọn Quiz của bạn</option>{mine.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select><label className="community-room-setting">Giây / câu<select value={roomSeconds} onChange={e=>setRoomSeconds(Number(e.target.value))}>{[10,15,20,30,45,60,90,120,180,300].map(n=><option value={n} key={n}>{n} giây</option>)}</select></label><label className="community-room-setting">Số người tối đa<input type="number" min="2" step="1" inputMode="numeric" value={roomCapacity} onChange={e=>setRoomCapacity(e.target.value)} aria-label="Số người tối đa"/></label><button disabled={!roomQuiz||!Number.isSafeInteger(Number(roomCapacity))||Number(roomCapacity)<2} onClick={createRoom}>Tạo phòng</button></div><div className="community-inline community-room-join"><input value={code} maxLength={6} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="Mã phòng 6 ký tự"/><button disabled={code.length!==6} onClick={()=>location.href="/room/"+encodeURIComponent(code)}>Tham gia</button></div></div></section>
  <section className="community-card"><h2><Share2/> Chia sẻ bộ Quiz của tôi</h2><p>Public: xuất hiện trong cộng đồng. Unlisted: chỉ ai có link. Private: chỉ mình bạn.</p><div className="community-list">{mine.map(item=><div key={item.id} className="community-entry"><span><b>{item.title}</b> · {item.questionCount||""} câu</span><select aria-label={"Quyền chia sẻ " +item.title} value={item.visibility||"private"} disabled={visibilityBusy.includes(item.id)} onChange={e=>void changeVisibility(item.id,e.currentTarget.value)}><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select><button onClick={()=>void action(async()=>{await navigator.clipboard.writeText(location.origin+"/community?quiz="+encodeURIComponent(item.id));setNotice("Đã sao chép link Quiz")})}>Sao chép link</button></div>)}</div></section>
- <section className="community-card"><h2><Search/> Thư viện Quiz cộng đồng</h2><div className="community-filters"><input placeholder="Tìm theo tiêu đề hoặc chủ đề" value={q} onChange={e=>{setQ(e.target.value);setPage(1)}}/><input placeholder="Lọc chủ đề" value={topicFilter} onChange={e=>{setTopicFilter(e.target.value);setPage(1)}}/><select value={difficulty} onChange={e=>{setDifficulty(e.target.value);setPage(1)}}><option value="">Mọi độ khó</option><option value="easy">Dễ</option><option value="medium">Vừa</option><option value="hard">Khó</option></select><select value={sort} onChange={e=>setSort(e.target.value)}><option value="newest">Mới nhất</option><option value="oldest">Cũ nhất</option></select></div><div className="community-grid">{items.map(item=><article key={item.id} className="community-quiz"><BookOpen size={24}/><h3>{item.title}</h3><p>{item.topic} · {item.difficulty} · {item.questionCount} câu</p><div className="community-quiz-actions"><button onClick={()=>void open(item.id)}><Play size={15}/> Làm Quiz</button><button onClick={()=>void action(async()=>{const reason=window.prompt("Vì sao bạn muốn báo cáo Quiz này? (10–500 ký tự)");if(reason===null)return;await post("/api/community/reports",{quizId:item.id,reason});setNotice("Đã gửi báo cáo để xem xét")})}>Báo cáo</button></div></article>)}</div><div className="community-pagination"><button disabled={page<=1} onClick={()=>setPage(x=>x-1)}>Trước</button><span>Trang {page} / {Math.max(1,Math.ceil(total/12))}</span><button disabled={page*12>=total} onClick={()=>setPage(x=>x+1)}>Sau</button></div></section>
+ <section className="community-card"><h2><Search/> Thư viện Quiz cộng đồng</h2><div className="community-filters"><input placeholder="Tìm theo tiêu đề hoặc chủ đề" value={q} onChange={e=>{setQ(e.target.value);setPage(1)}}/><input placeholder="Lọc chủ đề" value={topicFilter} onChange={e=>{setTopicFilter(e.target.value);setPage(1)}}/><select value={difficulty} onChange={e=>{setDifficulty(e.target.value);setPage(1)}}><option value="">Mọi độ khó</option><option value="easy">Dễ</option><option value="medium">Vừa</option><option value="hard">Khó</option></select><select value={sort} onChange={e=>setSort(e.target.value)}><option value="newest">Mới nhất</option><option value="oldest">Cũ nhất</option></select></div><div className="community-grid">{items.map(item=><article key={item.id} className="community-quiz"><BookOpen size={24}/><h3>{item.title}</h3><p>{item.topic} · {item.difficulty} · {item.questionCount} câu</p><div className="community-quiz-actions"><button onClick={()=>void open(item.id)}><Play size={15}/> Làm Quiz</button><button onClick={()=>{setReportQuiz(item);setReportReason("");setReportError("")}}><Flag size={15}/> Báo cáo</button></div></article>)}</div><div className="community-pagination"><button disabled={page<=1} onClick={()=>setPage(x=>x-1)}>Trước</button><span>Trang {page} / {Math.max(1,Math.ceil(total/12))}</span><button disabled={page*12>=total} onClick={()=>setPage(x=>x+1)}>Sau</button></div></section>
  <section className="community-card"><h2><Star/> Bảng xếp hạng XP</h2>{profile?.leaderboard.map(x=><div key={x.rank} className="community-entry"><b>#{x.rank} {x.name}</b><span>Level {x.level} · {x.xp} XP</span></div>)}</section>
+ {reportQuiz&&<div className="community-modal community-report-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)closeReport()}}>
+  <section className="community-modal-body community-report-dialog" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title" aria-describedby="report-dialog-description">
+   <div className="community-report-header"><div className="community-report-icon"><Flag size={21}/></div><button type="button" aria-label="Đóng hộp thoại" className="community-report-close" onClick={closeReport} disabled={reportBusy}><X size={20}/></button></div>
+   <h2 id="report-dialog-title">Báo cáo Quiz</h2>
+   <p id="report-dialog-description">Bạn đang báo cáo <strong>{reportQuiz.title}</strong>. Hãy mô tả vấn đề để quản trị viên xem xét.</p>
+   <form onSubmit={e=>void submitReport(e)}>
+    <label htmlFor="community-report-reason">Lý do báo cáo <span>(10–500 ký tự)</span></label>
+    <textarea id="community-report-reason" autoFocus required minLength={10} maxLength={500} rows={5} placeholder="Ví dụ: Quiz có nội dung không phù hợp hoặc đáp án gây hiểu nhầm..." value={reportReason} onChange={e=>{setReportReason(e.target.value);if(reportError)setReportError("")}} disabled={reportBusy}/>
+    <div className="community-report-footnote"><span>Vui lòng cung cấp lý do cụ thể.</span><span>{reportReason.length}/500</span></div>
+    {reportError&&<p role="alert" className="community-report-error">{reportError}</p>}
+    <div className="community-report-actions"><button type="button" className="community-report-cancel" onClick={closeReport} disabled={reportBusy}>Hủy</button><button type="submit" disabled={reportBusy||reportReason.trim().length<10||reportReason.trim().length>500}>{reportBusy?"Đang gửi...":"Gửi báo cáo"}</button></div>
+   </form>
+  </section>
+ </div>}
  {selected&&<div className="community-modal" role="dialog" aria-modal="true" aria-label="Bài Quiz"><div className="community-modal-body"><button onClick={()=>setSelected(null)} className="community-close">Đóng ×</button><h2>{selected.title}</h2>{selected.questions.map((item,i)=><fieldset disabled={Boolean(result)} key={item.id}><legend><b>Câu {i+1}.</b> {item.question}</legend>{item.options.map((option,j)=><label key={j}><input type="radio" name={"question-"+i} checked={answers[i]===j} onChange={()=>setAnswers(old=>({...old,[i]:j}))}/>{option}</label>)}{result&&<p className={result.details[i].correctIndex===answers[i]?"community-correct":"community-wrong"}>Đáp án: {item.options[result.details[i].correctIndex]} — {result.details[i].explanation}</p>}</fieldset>)}{result?<h3>Điểm: {result.score}/{result.total}</h3>:<button onClick={()=>void action(async()=>{const d=await post("/api/community/play",{quizId:selected.id,answers:selected.questions.map((_,i)=>answers[i]??-1)});setResult(d)})}>Nộp bài</button>}</div></div>}
  </main>
 }

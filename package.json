@@ -13,27 +13,28 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "next": "^15.5.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "lucide-react": "^0.468.0",
-    "@prisma/client": "6.19.3",
     "@prisma/adapter-libsql": "6.19.3",
+    "@prisma/client": "6.19.3",
+    "ably": "2.14.0",
+    "cheerio": "^1.0.0",
     "firebase": "^12.4.0",
     "firebase-admin": "^13.5.0",
-    "server-only": "^0.0.1",
-    "pdf-parse": "^1.1.1",
+    "katex": "^0.16.22",
+    "lucide-react": "^0.468.0",
     "mammoth": "^1.10.0",
-    "cheerio": "^1.0.0",
-    "katex": "^0.16.22"
+    "next": "^15.5.0",
+    "pdf-parse": "^1.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "@types/katex": "^0.16.7",
     "@types/node": "^22.0.0",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "prisma": "6.19.3",
-    "@types/pdf-parse": "^1.1.5",
-    "@types/katex": "^0.16.7"
+    "typescript": "^5.7.0"
   }
 }
