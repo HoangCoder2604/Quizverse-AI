@@ -51,3 +51,10 @@ a:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-visible
 /* Phase 6.1 learning topic selector */
 .adaptive-review-filter{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:15px 0;color:#52466b;font-weight:600}
 .adaptive-review-filter select{max-width:100%;min-width:min(100%,220px);padding:10px 14px;border:1px solid #ddd5ef;border-radius:10px;background:white;color:#302849}
+
+/* Phase 7 — confirm replacement before revoking another device */
+.auth-device-overlay{position:fixed;inset:0;z-index:9999;background:rgba(26,20,45,.65);display:grid;place-items:center;padding:20px}
+.auth-device-modal{width:min(100%,480px);background:#fff;color:#29233d;border-radius:20px;padding:28px;box-shadow:0 20px 80px rgba(0,0,0,.25)}
+.auth-device-modal h2{font-size:22px;margin:0 0 12px}.auth-device-modal p{line-height:1.6}
+.auth-device-actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-end;margin-top:24px}
+.auth-device-actions button{padding:12px 16px;border-radius:12px}

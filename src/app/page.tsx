@@ -35,6 +35,8 @@ export default function Home(){
  const [user,setUser]=useState<{id:string;name:string;email:string}|null>(null);
  const [authReady,setAuthReady]=useState(false),[authMode,setAuthMode]=useState<"login"|"register">("login"),[authEmail,setAuthEmail]=useState(""),[authPassword,setAuthPassword]=useState(""),[authName,setAuthName]=useState(""),[authBusy,setAuthBusy]=useState(false),[authError,setAuthError]=useState("");
  const [authNotice,setAuthNotice]=useState("");
+ const [pendingReplaceToken,setPendingReplaceToken]=useState<string|null>(null);
+ const [sessionRevoked,setSessionRevoked]=useState(false);
  const [screen,setScreen]=useState<Screen>("dashboard"),[sideOpen,setSideOpen]=useState(false);
  const [topic,setTopic]=useState(""),[count,setCount]=useState(10),[difficulty,setDifficulty]=useState<Difficulty>("medium");
  const [sourceMode,setSourceMode]=useState<"topic"|"text"|"file"|"url">("topic");
@@ -89,6 +91,23 @@ export default function Home(){
   }
   void load();return ()=>{active=false};
  },[]);
+ // Detect revocation on the previous device even when the user is idle.
+ useEffect(()=>{
+  if(!user)return;
+  let alive=true;
+  async function check(){
+   try{
+    const r=await fetch("/api/auth",{cache:"no-store"});
+    if(!alive||!r.ok)return;
+    const data=await r.json();
+    if(!data.user){setUser(null);setReady(false);setSessionRevoked(true);setScreen("dashboard");setQuizzes([]);setAttempts([]);setReviewDue([])}
+   }catch{/* transient network outage must not force logout */}
+  }
+  const interval=setInterval(()=>void check(),15000);
+  const onFocus=()=>void check();
+  window.addEventListener("focus",onFocus);
+  return ()=>{alive=false;clearInterval(interval);window.removeEventListener("focus",onFocus)};
+ },[user]);
  async function loadData(active=true){
   const [qr,ar]=await Promise.all([fetch("/api/quizzes",{cache:"no-store"}),fetch("/api/attempts",{cache:"no-store"})]);
   if(!qr.ok||!ar.ok) {setStorageError("Không đọc được dữ liệu Turso. Vui lòng thử lại.");return;}
@@ -120,6 +139,25 @@ export default function Home(){
   finally{setTutorBusy(false)}
  }
  function resetAuthForm(){setAuthEmail("");setAuthPassword("");setAuthName("");setAuthError("");setAuthNotice("");}
+ async function activateSession(idToken:string,confirmReplace=false){
+  const response=await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"session",idToken,confirmReplace})});
+  const data=await response.json();
+  if(response.status===409 && data.code==="LOGIN_CONFIRMATION_REQUIRED"){
+   setPendingReplaceToken(idToken);return;
+  }
+  if(!response.ok)throw new Error(data.error||"Không tạo được phiên đăng nhập");
+  setPendingReplaceToken(null);setSessionRevoked(false);
+  await signOut(firebaseAuth()).catch(()=>{});
+  setUser(data.user);resetAuthForm();await loadData();
+ }
+ async function confirmDeviceReplacement(){
+  if(!pendingReplaceToken)return;
+  setAuthBusy(true);setAuthError("");
+  try{await activateSession(pendingReplaceToken,true)}
+  catch(e){setAuthError(e instanceof Error?e.message:"Không thể chuyển thiết bị")}
+  finally{setAuthBusy(false)}
+ }
+ async function cancelDeviceReplacement(){setPendingReplaceToken(null);await signOut(firebaseAuth()).catch(()=>{})}
  async function authenticate(event:React.FormEvent){
   event.preventDefault();
   if(!isValidEmail(authEmail)){setAuthError("Email không đúng định dạng. Ví dụ: ten@gmail.com");return;}
@@ -139,10 +177,7 @@ export default function Home(){
    await cred.user.reload();
    if(!cred.user.emailVerified){await signOut(auth);throw new Error("Email chưa được xác minh. Hãy mở link trong hộp thư rồi đăng nhập lại.");}
    const idToken=await cred.user.getIdToken(true);
-   const res=await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"session",idToken})});
-   const data=await res.json();if(!res.ok)throw new Error(data.error||"Không thể tạo phiên đăng nhập");
-   await signOut(auth); // Server HttpOnly session cookie manages authentication after this point.
-   setUser(data.user);resetAuthForm();await loadData();
+   await activateSession(idToken);
   }catch(e){
    const code=(e as {code?:string})?.code||"";
    const messages:Record<string,string>={"auth/email-already-in-use":"Email đã được đăng ký. Vui lòng đăng nhập.","auth/invalid-email":"Email không hợp lệ.","auth/invalid-credential":"Email hoặc mật khẩu không đúng.","auth/weak-password":"Mật khẩu quá yếu.","auth/too-many-requests":"Thao tác quá nhiều lần. Vui lòng thử lại sau.","auth/network-request-failed":"Không thể kết nối Firebase."};
@@ -159,10 +194,7 @@ export default function Home(){
    await credential.user.reload();
    if(!credential.user.emailVerified)throw new Error("Google chưa xác nhận email này. Vui lòng sử dụng tài khoản Google có email đã xác minh.");
    const idToken=await credential.user.getIdToken(true);
-   const response=await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"session",idToken})});
-   const result=await response.json();
-   if(!response.ok)throw new Error(result.error||"Không thể đăng nhập bằng Google");
-   setUser(result.user);resetAuthForm();await loadData();
+   await activateSession(idToken);
   }catch(e){
    const code=(e as {code?:string})?.code||"";
    const messages:Record<string,string>={
@@ -440,6 +472,8 @@ export default function Home(){
   <div className="auth-logo"><BrainCircuit size={30}/> quizverse<span>.</span></div>
   <h1>{authMode==="login"?"Chào mừng bạn trở lại":"Tạo tài khoản QuizVerse"}</h1>
   <p>Lưu bài luyện tập và tiếp tục học trên mọi thiết bị.</p>
+  {pendingReplaceToken&&<div className="auth-device-overlay" role="dialog" aria-modal="true" aria-labelledby="replace-session-title"><div className="auth-device-modal"><h2 id="replace-session-title">Tài khoản đang đăng nhập trên thiết bị khác</h2><p>Nếu tiếp tục, phiên đăng nhập trên thiết bị cũ sẽ kết thúc. Bạn có muốn tiếp tục trên thiết bị này?</p>{authError&&<p role="alert">{authError}</p>}<div className="auth-device-actions"><button type="button" disabled={authBusy} onClick={()=>void cancelDeviceReplacement()}>Hủy</button><button className="primary-button" type="button" disabled={authBusy} onClick={()=>void confirmDeviceReplacement()}>{authBusy?"Đang xử lý...":"Đăng xuất thiết bị cũ và tiếp tục"}</button></div></div></div>}
+  {sessionRevoked&&<div className="auth-notice" role="status">Phiên của bạn đã kết thúc vì tài khoản được đăng nhập trên thiết bị khác. Hãy đăng nhập lại.</div>}
   <form onSubmit={authenticate}>
    {authMode==="register"&&<label>Họ và tên<input required minLength={2} maxLength={80} autoComplete="name" value={authName} onChange={e=>setAuthName(e.target.value)} placeholder="Tên của bạn"/></label>}
    <label>Email<input required type="email" autoComplete="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="ban@example.com"/></label>

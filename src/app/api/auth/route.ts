@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
-import { allowMutation, createFirebaseSession, currentUser, removeSession } from "@/lib/auth";
+import { allowMutation, createFirebaseSession, currentUser, removeSession, LoginConfirmationRequired } from "@/lib/auth";
 import { checkRateLimits, logoutRules, sessionIpRules, sessionUserRules } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export async function GET() {
@@ -32,9 +32,11 @@ export async function POST(req: NextRequest) {
     const verified = await adminAuth().verifyIdToken(body.idToken, true);
     const byUser = await checkRateLimits(req, sessionUserRules, verified.uid);
     if (!byUser.allowed) return limited(byUser.retryAfter);
-    const user = await createFirebaseSession(body.idToken);
+    const user = await createFirebaseSession(body.idToken, body.confirmReplace === true);
     return NextResponse.json({ user }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
+    if (e instanceof LoginConfirmationRequired)
+      return NextResponse.json({code:"LOGIN_CONFIRMATION_REQUIRED",error:"Tài khoản đang hoạt động trên thiết bị khác. Bạn có muốn đăng xuất thiết bị đó để tiếp tục?"},{status:409});
     if (e instanceof Error && e.message === "EMAIL_NOT_VERIFIED")
       return NextResponse.json({ error: "Cần xác minh email trước khi đăng nhập." }, { status: 403 });
     if (e instanceof Error && (e.message === "ACCOUNT_CONFLICT" || e.message === "EMAIL_CHANGED"))

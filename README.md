@@ -1,6 +1,6 @@
 # QuizVerse AI — Hướng dẫn tổng hợp (Phase 1–6.1)
 
-> **README chính — tổng hợp Phase 1 đến Phase 6.1 (cập nhật 18/10/2026).** Phase 6.1 đạt **8/8 test case PASS theo xác nhận người kiểm thử**; kết quả này không đồng nghĩa đã được kiểm toán production độc lập. Các mục tài liệu Phase 6 ban đầu phía dưới là lịch sử phát triển, không phải cấu hình runtime hiện hành. Phase 7 được triển khai/kiểm thử riêng.
+> **README chính — cập nhật đến Phase 6.1 (TC05 đang cần kiểm thử).** Các mục Phase 1–5 và hướng dẫn cũ ở phụ lục là tài liệu lịch sử. Khi có khác biệt, ưu tiên cấu hình hiện tại và các mục Phase 6/6.1 bên dưới. Project dùng Next.js, Firebase Authentication, Turso + Prisma, Gemini; bản TC05 đã bổ sung mã tích hợp Ably nhưng chưa xác nhận build/kiểm thử thực tế.
 
 ## Tính năng hiện tại
 
@@ -10,7 +10,7 @@
 - **Phase 4:** Quiz Engine, thời gian, chấm điểm, giải thích, LaTeX, sửa/xóa Quiz trong thư viện, biểu đồ thống kê và lịch sử.
 - **Phase 5:** Topic Mastery, gợi ý độ khó cho Quiz tiếp theo, ôn tập theo lịch, AI Tutor và Learning Analytics.
 - **Phase 6:** Thư viện Quiz cộng đồng, chế độ private/unlisted/public, Quiz Room, XP, cấp độ, thành tựu, bảng xếp hạng và báo cáo Quiz.
-- **Phase 6.1:** Lọc ôn tập theo chủ đề, chống trùng `ReviewCard`, tùy chỉnh thời gian/công suất phòng, Ably Realtime + reconnect, modal báo cáo Quiz, phân quyền Admin phía server; **8/8 TC PASS theo xác nhận người kiểm thử**.
+- **Phase 6.1:** Lọc ôn tập theo chủ đề, cấu hình thời gian/công suất phòng, quản trị báo cáo; TC05 thêm mã tích hợp Ably Realtime (cần cài và kiểm thử).
 
 ## Cấu hình hiện tại
 
@@ -79,31 +79,18 @@ WHERE type='table' AND name IN ('TopicMastery','ReviewCard','LearningSubmission'
 
 ---
 
-## Trạng thái kiểm thử Phase 6.1 (18/10/2026)
+## Trạng thái kiểm thử gần nhất (16/10/2026)
 
-| TC | Nội dung | Trạng thái |
-|---|---|---|
-| TC01 | Ôn tập tổng hợp, lọc theo chủ đề; khắc phục và dọn bản ghi trùng `ReviewCard` | PASS — người dùng xác nhận |
-| TC02 | Chủ phòng tùy chỉnh thời gian mỗi câu | PASS — người dùng xác nhận |
-| TC03 | Chủ phòng tùy chỉnh sức chứa, không cố định 10 người | PASS — người dùng xác nhận |
-| TC04 | UI Quiz Room và Leaderboard | PASS — người dùng xác nhận |
-| TC05 | Ably Realtime, tự kết nối khi tham gia, Offline/Online, reload và đồng bộ điểm | PASS — người dùng xác nhận |
-| TC06 | Admin moderation, bảo vệ route phía server, modal báo cáo | PASS — người dùng xác nhận |
-| TC07 | Xác thực/phân quyền API, Quiz visibility, token Ably, quyền Host, chống gian lận, cách ly tài khoản | PASS — người dùng xác nhận |
-| TC08 | Regression Phase 1–6 | PASS — theo xác nhận người dùng; chưa có chứng nhận kiểm thử độc lập hoàn chỉnh |
+| TC Phase 6.1 | Tình trạng |
+|---|---|
+| TC01 — Ôn tập theo chủ đề, dọn dữ liệu trùng | PASS theo xác nhận người kiểm thử |
+| TC02 — Thời gian mỗi câu | PASS theo xác nhận người kiểm thử |
+| TC03 — Số người tham gia | PASS theo xác nhận người kiểm thử |
+| TC04 — Giao diện Room và Leaderboard | PASS theo xác nhận người kiểm thử |
+| TC05 — Ably realtime và reconnect | Đã bổ sung mã; **chưa xác nhận build và chưa PASS** |
+| TC06–TC08 — Moderation, security, regression | Chưa xác nhận |
 
-**Tổng kết: Phase 6.1 = 8/8 PASS theo kiểm thử đã báo cáo.** Trước khi deploy production vẫn cần load test 50–100+ người, kiểm tra bảo mật chuyên sâu, CI tự động và bảo đảm `.env.local` không được commit.
-
-### Cấu hình quan trọng của Phase 6.1 hiện tại
-
-- **Ably SDK:** Cố định `ably@2.14.0` bằng `npm install ably@2.14.0 --save-exact`, do phiên bản `2.29.0` đã gặp lỗi `super keyword outside a method` với Next.js 15.5.27/Webpack trong quá trình kiểm thử. Commit cả `package.json` và `package-lock.json`.
-- **Realtime:** Backend giữ Turso làm dữ liệu có thẩm quyền, Ably thông báo thay đổi, API nạp lại trạng thái; polling là dự phòng, không phải cơ chế realtime chính.
-- **Quản trị:** Biến môi trường server `COMMUNITY_ADMIN_USER_IDS` chứa danh sách User ID Admin, phân cách bằng dấu phẩy. Trang `/community/admin` chuyển hướng tài khoản không có quyền; API vẫn kiểm tra phân quyền.
-- **Tạo phòng:** Host cấu hình `secondsPerQuestion` và `maxParticipants`; các phòng cũ có giá trị mặc định từ migration. Sức chứa lớn không đồng nghĩa đã qua kiểm thử tải.
-- **ReviewCard:** UI thống kê các câu trùng tương đương thành một đơn vị ôn tập; các bản ghi trùng cũ đã được người dùng dọn sau khi kiểm tra. Không mặc định xóa thẻ trùng trong môi trường khác.
-- **Báo cáo Quiz:** Thao tác từ modal thay vì `window.prompt`; xử lý báo cáo qua quyền Admin. Chưa mặc định có lịch sử kiểm duyệt bất biến.
-
-> **Phân biệt tài liệu cũ:** Các đoạn “Phase 6 — thiết lập” và “nhật ký triển khai” bên dưới giữ nguyên để tra cứu bản MVP lúc đó (giới hạn 10 người, polling, chưa có dashboard). Những nội dung đó đã thay đổi qua Phase 6.1, hãy ưu tiên phần **Cấu hình quan trọng** và **Trạng thái kiểm thử** phía trên.
+> **Lưu ý phiên bản:** Tài liệu Phase 6 gốc dưới đây được giữ để tra cứu lịch sử, nên có mô tả cũ về giới hạn 10 người, thời gian 30 giây, polling 2 giây và dashboard chưa có. Ở Phase 6.1, chủ phòng đã có thể cấu hình sức chứa và thời gian; giao diện quản trị đã được bổ sung; bản TC05 mới có mã realtime và fallback polling. Không dùng các giới hạn cũ làm thông số hiện tại.
 
 ## Thiết lập nhanh bản hiện tại
 
@@ -112,13 +99,9 @@ WHERE type='table' AND name IN ('TopicMastery','ReviewCard','LearningSubmission'
    - `prisma/migrations/20261016000000_community_multiplayer/migration.sql`
    - `prisma/migrations/20261016010000_quiz_reports/migration.sql`
    - `prisma/migrations/20261017000000_room_settings/migration.sql`
-3. Điền `ABLY_API_KEY` vào `.env.local` của máy chạy server và thêm `COMMUNITY_ADMIN_USER_IDS` nếu dùng quản trị; **không commit** các biến bí mật.
+3. Nếu dùng TC05 realtime, điền `ABLY_API_KEY` vào `.env.local` của máy chạy server; **không commit** key.
 4. Chạy `npm install`, `npx prisma generate`, `npx tsc --noEmit`, `npm run build`, sau đó `npm run dev`.
-5. Xác nhận lại Realtime/reconnect và quyền Admin trên môi trường triển khai riêng; các kết quả PASS phía trên là theo môi trường người dùng đã kiểm thử.
-
-## Chuyển tiếp Phase 7
-
-Phase 7 — Testing & Optimization bổ sung Vitest, Playwright, kiểm tra AI và hiệu năng, tự động dọn `AuthRateLimit`, và quản lý phiên đăng nhập theo chính sách **thiết bị mới phải xác nhận trước khi thu hồi phiên cũ**. Phần này **chưa được tính vào 8/8 PASS của Phase 6.1**. Nếu dùng bản source Phase 7, sao lưu Phase 6.1 trước, thực hiện migration `20261018000000_active_login` đúng một lần, cấu hình `CRON_SECRET` và kiểm thử migration/đăng nhập theo hướng dẫn riêng.
+5. TC05 chỉ PASS sau khi kiểm thử hai tài khoản, sự kiện realtime, mất mạng/reconnect và làm mới trang.
 
 ## Chi tiết Phase 6 và Phase 6.1 (hợp nhất từ tài liệu riêng)
 

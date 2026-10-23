@@ -24,7 +24,7 @@ export async function GET(_: Request, context: Context) {
   try {
     const request = await ably.auth.createTokenRequest({
       clientId: user.id,
-      ttl: 60 * 60 * 1000,
+      ttl: 60 * 1000,
       capability: JSON.stringify({ [roomChannel(code)]: ["subscribe"] }),
     });
     return NextResponse.json(request, { headers: { "Cache-Control": "no-store" } });

@@ -183,3 +183,14 @@ model QuizReport {
  @@unique([quizId,reporterId])
  @@index([quizId,createdAt])
 }
+
+// Phase 7: one active browser session per user. A login from another device
+// requires explicit confirmation before this record is replaced.
+model ActiveLogin {
+  userId     String   @id
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  updatedAt  DateTime @updatedAt
+
+  @@index([expiresAt])
+}
